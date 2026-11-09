@@ -122,29 +122,59 @@ def _gray(v):
     return (v, v, v)
 
 
+# 문제집에 흔한 '색깔 인쇄' — 빨간펜과 헷갈리기 쉬운 빨강/주황/분홍을 일부러 많이 (지우면 안 되는 것)
+PRINT_COLORS = [(230, 80, 60), (240, 120, 60), (245, 140, 70), (220, 50, 70), (235, 95, 120), (200, 40, 40),
+                (60, 110, 200), (40, 70, 160), (40, 150, 90), (150, 90, 200)]
+TAG_WORDS = ['교과 역량', '교과서 pick', '서술형', '창의 융합', '실력 UP', '기본', '응용', '심화', '중요', 'Check', 'Tip']
+
+
 def render_print_page(rng, fonts, w=960, h=960):
     paper = rng.randint(238, 255)
     img = Image.new('RGB', (w, h), (paper, paper, max(225, paper - rng.randint(0, 10))))
     d = ImageDraw.Draw(img)
-    base = rng.randint(22, 36)              # 본문 글자 크기
+    base = rng.randint(16, 36)              # 본문 글자 크기 (작게 찍힌 사진도 포함)
     ink = _gray(rng.randint(10, 45))        # 본문 인쇄 색
     light = _gray(rng.randint(95, 175))     # 연한 회색 인쇄 (지우면 안 되는 것)
     accent = rng.choice([(232, 96, 80), (240, 120, 90), (90, 170, 110), (120, 180, 140), (80, 130, 200), (230, 90, 140)])
+    pcol = rng.choice(PRINT_COLORS)         # 이 페이지의 색깔 인쇄 (문제 번호, 제목, 꼬리표)
     y = rng.randint(-base, base)
     x0 = rng.randint(10, 60)
 
     while y < h - base:
         kind = rng.choices(
-            ['problem', 'text', 'box', 'answer', 'paren', 'band', 'label', 'figure', 'gray', 'dots', 'table', 'english'],
-            weights=[18, 14, 8, 10, 8, 4, 6, 6, 8, 3, 3, 8])[0]
+            ['problem', 'text', 'box', 'answer', 'paren', 'band', 'label', 'figure', 'gray', 'dots', 'table', 'english',
+             'ctext', 'tag'],
+            weights=[18, 14, 8, 10, 8, 4, 6, 6, 8, 3, 3, 8, 5, 5])[0]
         fs = int(base * rng.uniform(0.85, 1.15))
         if kind == 'problem':
             num = str(rng.randint(1, 30))
-            d.text((x0, y), num, font=fonts.print_font(rng, int(fs * 1.5), bold=True), fill=ink)
-            tx = x0 + int(fs * 1.4)
+            # 문제 번호는 절반쯤 색깔 인쇄 (주황/빨강 번호를 빨간펜으로 착각하지 않도록)
+            ncol = pcol if rng.random() < 0.5 else ink
+            nsize = int(fs * rng.uniform(1.2, 1.8))
+            d.text((x0, y), num, font=fonts.print_font(rng, nsize, bold=True), fill=ncol)
+            tx = x0 + int(nsize * (0.7 * len(num) + 0.4))
             for _ in range(rng.randint(1, 3)):
                 d.text((tx, y), _rand_ko_line(rng), font=fonts.print_font(rng, fs), fill=ink)
                 y += int(fs * 1.6)
+        elif kind == 'ctext':
+            # 색깔 제목/강조 글자
+            d.text((x0 + rng.randint(0, 120), y), _rand_ko_line(rng, 16) if rng.random() < 0.7 else _rand_en_line(rng),
+                   font=fonts.print_font(rng, int(fs * rng.uniform(0.9, 1.3)), bold=rng.random() < 0.6), fill=pcol)
+            y += int(fs * 1.8)
+        elif kind == 'tag':
+            # 진한 색 꼬리표 상자 + 흰 글자 (예: '교과 역량'), 옆에 본문
+            fnt = fonts.print_font(rng, int(fs * 0.8), bold=True)
+            word = rng.choice(TAG_WORDS)
+            tw = int(fnt.getlength(word)) + 14
+            th = int(fs * 1.25)
+            if rng.random() < 0.7:
+                d.rounded_rectangle((x0, y, x0 + tw, y + th), radius=rng.randint(2, 8), fill=pcol)
+                d.text((x0 + 7, y + th * 0.12), word, font=fnt, fill=(255, 255, 255))
+            else:
+                d.rounded_rectangle((x0, y, x0 + tw, y + th), radius=rng.randint(2, 8), outline=pcol, width=2)
+                d.text((x0 + 7, y + th * 0.12), word, font=fnt, fill=pcol)
+            d.text((x0 + tw + fs // 2, y), _rand_ko_line(rng), font=fonts.print_font(rng, fs), fill=ink)
+            y += int(fs * 1.8)
         elif kind == 'text':
             d.text((x0 + rng.randint(0, 80), y), _rand_ko_line(rng), font=fonts.print_font(rng, fs), fill=ink)
             y += int(fs * 1.6)
@@ -309,7 +339,8 @@ def render_hand_alpha(rng, fonts, w, h, scale=1.0, n_text=None, n_strokes=None):
 
 
 # ---------------------------------------------------------------- 필기구 스타일
-INK_STYLES = ['pencil', 'pencil', 'pencil', 'pencil_dark', 'pen_black', 'pen_blue', 'pen_red', 'color_pencil']
+INK_STYLES = ['pencil', 'pencil', 'pencil', 'pencil_light', 'pencil_dark', 'pen_black', 'pen_blue', 'pen_red',
+              'pen_purple', 'color_pencil']
 
 
 def apply_ink(page, alpha, rng, style=None):
@@ -319,7 +350,8 @@ def apply_ink(page, alpha, rng, style=None):
     if style.startswith('pencil'):
         g = rng.uniform(55, 115)
         color = np.array([g, g, g * rng.uniform(1.0, 1.08)])
-        strength = rng.uniform(0.75, 1.0) if style == 'pencil_dark' else rng.uniform(0.3, 0.8)
+        strength = {'pencil_dark': (0.75, 1.0), 'pencil_light': (0.15, 0.35)}.get(style, (0.3, 0.8))
+        strength = rng.uniform(*strength)
         grain = gaussian_filter(np.random.default_rng(rng.randint(0, 2**31)).random((h, w)).astype(np.float32), 0.7)
         grain = (grain - grain.mean()) / (grain.std() + 1e-6)
         a = alpha * strength * np.clip(0.75 + 0.35 * grain, 0.15, 1.2)
@@ -331,8 +363,11 @@ def apply_ink(page, alpha, rng, style=None):
         color = np.array([rng.uniform(20, 60), rng.uniform(40, 80), rng.uniform(120, 190)])
         a = alpha * rng.uniform(0.8, 1.0)
     elif style == 'pen_red':
-        color = np.array([rng.uniform(190, 230), rng.uniform(30, 80), rng.uniform(50, 100)])
-        a = alpha * rng.uniform(0.8, 1.0)
+        color = np.array([rng.uniform(190, 235), rng.uniform(30, 100), rng.uniform(40, 110)])
+        a = alpha * rng.uniform(0.6, 1.0)
+    elif style == 'pen_purple':
+        color = np.array([rng.uniform(90, 150), rng.uniform(40, 90), rng.uniform(140, 200)])
+        a = alpha * rng.uniform(0.7, 1.0)
     else:  # 색연필
         base = rng.choice([(230, 90, 140), (90, 120, 220), (60, 160, 90), (240, 150, 60)])
         color = np.array(base, dtype=np.float32)
@@ -412,11 +447,23 @@ def _random_crop(rng, arrs, size):
     return [a[y:y + size, x:x + size] for a in arrs]
 
 
+def _print_ink(clean):
+    """깨끗한 인쇄 페이지에서 '인쇄가 있는 곳' (손글씨가 지나가도 지우면 안 되는 픽셀)."""
+    c = clean.astype(np.float32)
+    lum = c.mean(axis=2)
+    chroma = c.max(axis=2) - c.min(axis=2)
+    return (lum < 170) | (chroma > 60)
+
+
 def make_sample(rng, fonts, exam=None, tile=384, region=768):
-    """반환: (입력 RGB uint8 tile×tile, 마스크 uint8 0/1)"""
+    """반환: (입력 RGB uint8 tile×tile, 마스크 uint8 0/1)
+
+    정답 마스크 = '손글씨가 보이고, 그 아래 인쇄는 없는 곳'
+    → 손글씨가 인쇄 글자를 지나가도 인쇄 획은 남기도록 배움
+    """
     mode = rng.random()
     use_exam = exam is not None and len(exam) > 0
-    scale = rng.uniform(0.75, 1.3)
+    scale = rng.uniform(0.6, 1.3)
 
     if use_exam and mode < 0.3:
         # (a) 실제 학생 손글씨가 있는 시험지 그대로
@@ -424,7 +471,7 @@ def make_sample(rng, fonts, exam=None, tile=384, region=768):
         src, tgt = _random_crop(rng, [src, tgt], region)
         _, mask = ExamInk.ink_from_pair(src, tgt)
         page = src.astype(np.float32)
-        hand = mask.astype(bool)
+        hand = mask.astype(bool) & ~_print_ink(tgt)
     else:
         # (b) 인쇄 페이지 + 합성 손글씨
         if use_exam and mode < 0.6:
@@ -432,8 +479,10 @@ def make_sample(rng, fonts, exam=None, tile=384, region=768):
             page = _random_crop(rng, [tgt], region)[0].astype(np.float32)
         else:
             page = render_print_page(rng, fonts, region, region).astype(np.float32)
+        printed = _print_ink(page)
         hand = np.zeros(page.shape[:2], bool)
-        n_layers = rng.randint(1, 3)
+        # 가끔은 손글씨 없는 깨끗한 페이지 (색깔 인쇄를 지우지 않도록)
+        n_layers = 0 if rng.random() < 0.08 else rng.randint(1, 3)
         for _ in range(n_layers):
             if use_exam and rng.random() < 0.35:
                 s2, t2 = exam.load(rng, scale * rng.uniform(0.75, 1.0))
@@ -442,8 +491,16 @@ def make_sample(rng, fonts, exam=None, tile=384, region=768):
             else:
                 alpha = render_hand_alpha(rng, fonts, region, region, scale=scale)
             page, visible = apply_ink(page, alpha, rng)
-            hand |= visible > 0.07
+            hand |= visible > 0.05
+        hand &= ~printed
         page = np.clip(page, 0, 255)
+
+    # 작게 찍힌 사진 흉내 (앱은 사진을 줄여서 AI에 넣음)
+    if rng.random() < 0.35:
+        f = rng.uniform(0.6, 0.95)
+        size = (int(page.shape[1] * f), int(page.shape[0] * f))
+        page = np.asarray(Image.fromarray(np.clip(page, 0, 255).astype(np.uint8)).resize(size, Image.BILINEAR)).astype(np.float32)
+        hand = np.asarray(Image.fromarray(hand.astype(np.uint8) * 255).resize(size, Image.BILINEAR)) > 127
 
     img = photo_aug(page.astype(np.uint8), rng)
     img = normalize(img)

@@ -33,6 +33,9 @@ class Tiles(Dataset):
         if self.train:
             if random.random() < 0.5:   # 좌우 뒤집기
                 x, y = x[:, ::-1], y[:, ::-1]
+            if random.random() < 0.3:   # 옆으로/거꾸로 찍힌 사진
+                k = random.choice([1, 2, 3])
+                x, y = np.rot90(x, k), np.rot90(y, k)
             # 밝기/대비 살짝
             x = np.clip((x - 0.5) * random.uniform(0.85, 1.15) + 0.5 + random.uniform(-0.04, 0.04), 0, 1)
         x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1)))

@@ -24,7 +24,7 @@ cells = [md('''
 **실행 방법**
 1. 위 메뉴 **런타임 → 런타임 유형 변경 → T4 GPU** 선택 후 저장
 2. **런타임 → 모두 실행** (Ctrl+F9)
-3. 약 40~60분 뒤 마지막 칸에서 `inkseg.onnx` 파일이 자동으로 다운로드됩니다
+3. 약 1시간 30분 뒤 마지막 칸에서 `inkseg.onnx` 파일이 자동으로 다운로드됩니다
 4. 받은 파일을 PC의 `wrong_question/train/` 폴더에 넣어주세요
 
 중간에 창을 닫으면 학습이 멈춥니다. 탭은 열어둔 채로 다른 일을 하셔도 됩니다.
@@ -46,10 +46,10 @@ snapshot_download('ynyg/ExamInk-Seg', repo_type='dataset', local_dir='work/exami
                   allow_patterns=['data/train/source/*', 'data/train/target/*'])
 import os; print(len(os.listdir('work/examink/data/train/source')), '장')
 '''),
-    md('## 3. 학습 조각 만들기 (약 8,000개 · 20~30분)'),
-    code('!python make_dataset.py --exam work/examink --out work/tiles --n 8000'),
-    md('## 4. 학습 (약 10~20분)'),
-    code('!python train.py --tiles work/tiles --out work/run1 --epochs 25 --batch 32 --workers 2'),
+    md('## 3. 학습 조각 만들기 (약 10,000개 · 50~70분)'),
+    code('!python make_dataset.py --exam work/examink --out work/tiles --n 10000'),
+    md('## 4. 학습 (약 15~25분)'),
+    code('!python train.py --tiles work/tiles --out work/run1 --epochs 30 --batch 32 --workers 2'),
     md('## 5. 결과 파일 받기'),
     code('''
 from google.colab import files

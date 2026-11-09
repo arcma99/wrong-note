@@ -41,7 +41,7 @@ self.onmessage = async (e) => {
 };
 
 // ---------- AI 손글씨 찾기 (기기 안에서 실행, 인터넷 불필요) ----------
-const AI_MAX_SIDE = 1400; // 학습 때와 비슷한 크기로 줄여서 판단
+const AI_MAX_SIDE = 1200; // 학습 때와 비슷한 크기로 줄여서 판단 (작을수록 빠름)
 const TILE = 512, MARGIN = 32; // 메모리를 아끼려고 조각으로 나눠 실행
 let session = null;
 
@@ -124,8 +124,10 @@ function runAI({ pencil, pen, strength }) {
   const th = Math.round((0.75 - strength * 0.005) * 255);
   let hand = new Uint8Array(N);
   for (let p = 0; p < N; p++) if (aiProb[p] > th) hand[p] = 1;
-  // 획 가장자리의 옅은 테두리까지
+  // 획 가장자리의 옅은 테두리까지 넓히되, AI가 '확실히 손글씨 아님'으로 본 곳(옆의 인쇄 글자)은 남김
   hand = dilate(hand, W, H, Math.max(1, Math.round(1 / aiScale)));
+  const low = Math.round(th * 0.3);
+  for (let p = 0; p < N; p++) if (hand[p] && aiProb[p] < low) hand[p] = 0;
 
   const out = new Uint8ClampedArray(N * 4);
   for (let p = 0; p < N; p++) {
