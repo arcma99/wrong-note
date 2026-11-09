@@ -1,0 +1,3 @@
+# 아이 숙제 사진은 저장소에 넣지 않음 (나중에 GitHub에 올려도 공개되지 않도록)
+샘플사진/
+.claude/settings.local.json
