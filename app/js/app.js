@@ -11,6 +11,7 @@ const routes = [
   [/^#\/p\/([^/]+)$/, (m) => listView(m[1])],
   [/^#\/p\/([^/]+)\/new$/, (m) => editorView(m[1])],
   [/^#\/p\/([^/]+)\/q\/([^/]+)$/, (m) => detailView(m[1], m[2])],
+  [/^#\/p\/([^/]+)\/q\/([^/]+)\/clean$/, (m) => editorView(m[1], m[2])],
 ];
 
 let current = null;

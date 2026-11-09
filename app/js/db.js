@@ -73,8 +73,7 @@ export async function deleteProfile(id) {
     t.objectStore('profiles').delete(id);
     for (const q of problems) {
       t.objectStore('problems').delete(q.id);
-      t.objectStore('images').delete(`${q.id}/full`);
-      t.objectStore('images').delete(`${q.id}/thumb`);
+      for (const k of IMAGE_KINDS) t.objectStore('images').delete(`${q.id}/${k}`);
     }
   });
 }
@@ -84,7 +83,9 @@ export async function listProblems(profileId) {
   return reqP((await store('problems')).index('profileId').getAll(profileId));
 }
 
-export async function createProblem(profileId, fullBlob, thumbBlob) {
+const IMAGE_KINDS = ['full', 'thumb', 'orig']; // 정리본, 목록용 작은 그림, 지우기 전 원본
+
+export async function createProblem(profileId, fullBlob, thumbBlob, origBlob) {
   const now = nowISO();
   const q = {
     id: uid(), profileId, createdAt: now, updatedAt: now,
@@ -94,8 +95,17 @@ export async function createProblem(profileId, fullBlob, thumbBlob) {
     t.objectStore('problems').put(q);
     t.objectStore('images').put({ id: `${q.id}/full`, blob: fullBlob });
     t.objectStore('images').put({ id: `${q.id}/thumb`, blob: thumbBlob });
+    if (origBlob) t.objectStore('images').put({ id: `${q.id}/orig`, blob: origBlob });
   });
   return q;
+}
+
+export async function putImages(problemId, blobs) {
+  await txn(['images'], (t) => {
+    for (const [kind, blob] of Object.entries(blobs)) {
+      t.objectStore('images').put({ id: `${problemId}/${kind}`, blob });
+    }
+  });
 }
 
 export async function saveProblem(q) {
@@ -106,8 +116,7 @@ export async function saveProblem(q) {
 export async function deleteProblem(id) {
   await txn(['problems', 'images'], (t) => {
     t.objectStore('problems').delete(id);
-    t.objectStore('images').delete(`${id}/full`);
-    t.objectStore('images').delete(`${id}/thumb`);
+    for (const k of IMAGE_KINDS) t.objectStore('images').delete(`${id}/${k}`);
   });
 }
 

@@ -1,5 +1,5 @@
 // 앱 화면 파일을 기기에 저장해 두고(오프라인 동작), 백그라운드에서 새 버전을 받아옵니다.
-const CACHE = 'wrongnote-v1';
+const CACHE = 'wrongnote-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +10,8 @@ const ASSETS = [
   'js/util.js',
   'js/image.js',
   'js/shared.js',
+  'js/clean-worker.js',
+  'js/views/cleaner.js',
   'js/views/profiles.js',
   'js/views/list.js',
   'js/views/editor.js',
@@ -37,7 +39,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const key = req.mode === 'navigate' ? 'index.html' : req;
+      // 화면(문서) 요청만 index.html로 대신 응답 (워커 스크립트 요청은 제외)
+      const key = req.mode === 'navigate' && req.destination === 'document' ? 'index.html' : req;
       const cached = await cache.match(key);
       const network = fetch(req)
         .then((res) => {

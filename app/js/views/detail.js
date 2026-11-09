@@ -8,6 +8,8 @@ export async function detailView(pid, qid) {
 
   const blob = await db.getImage(`${qid}/full`);
   const imgUrl = blob ? URL.createObjectURL(blob) : '';
+  const origBlob = await db.getImage(`${qid}/orig`);
+  const origUrl = origBlob ? URL.createObjectURL(origBlob) : '';
 
   // ---- 저장 ----
   const status = h('span', { class: 'save-status' });
@@ -26,11 +28,23 @@ export async function detailView(pid, qid) {
   const saveSoon = debounce(save, 400);
 
   // ---- 문제 이미지 ----
+  let showOrig = false;
+  const mainImg = h('img', { src: imgUrl, alt: '문제' });
+  const viewerImg = h('img', { src: imgUrl, alt: '문제 크게 보기' });
   const viewer = h('div', { class: 'viewer hidden', onclick: () => viewer.classList.add('hidden') },
-    h('img', { src: imgUrl, alt: '문제 크게 보기' }),
+    viewerImg,
     h('span', { class: 'viewer-close' }, '닫기 ✕'));
   const problemImg = h('button', { class: 'problem-img', onclick: () => viewer.classList.remove('hidden'), 'aria-label': '크게 보기' },
-    imgUrl ? h('img', { src: imgUrl, alt: '문제' }) : h('div', { class: 'empty' }, '이미지가 없어요'));
+    imgUrl ? mainImg : h('div', { class: 'empty' }, '이미지가 없어요'));
+  const origToggle = origUrl ? h('button', { class: 'btn small', onclick: () => {
+    showOrig = !showOrig;
+    mainImg.src = viewerImg.src = showOrig ? origUrl : imgUrl;
+    origToggle.textContent = showOrig ? '✨ 정리본 보기' : '👀 내가 푼 원본 보기';
+    problemImg.classList.toggle('orig', showOrig);
+  } }, '👀 내가 푼 원본 보기') : null;
+  const imgActions = h('div', { class: 'row img-actions' },
+    origToggle,
+    h('a', { class: 'btn small', href: `#/p/${pid}/q/${qid}/clean` }, '✏️ 다시 다듬기'));
 
   // ---- 과목 / 단원 ----
   const subjectChips = h('div', { class: 'chips' });
@@ -102,7 +116,7 @@ export async function detailView(pid, qid) {
     topbar({ back: `#/p/${pid}`, title: `${fmtFullDate(q.createdAt)} 오답`,
       right: h('button', { class: 'icon-btn', onclick: remove, 'aria-label': '삭제' }, '🗑') }),
     h('div', { class: 'detail-layout' },
-      h('section', { class: 'panel problem-panel' }, problemImg),
+      h('section', { class: 'panel problem-panel' }, problemImg, imgActions),
       h('div', { class: 'side' },
         h('section', { class: 'panel' },
           h('h3', {}, '복기 체크'),
@@ -126,6 +140,7 @@ export async function detailView(pid, qid) {
     cleanup() {
       saveSoon.flush();
       if (imgUrl) URL.revokeObjectURL(imgUrl);
+      if (origUrl) URL.revokeObjectURL(origUrl);
     },
   };
 }
