@@ -2,3 +2,6 @@
 샘플사진/
 .claude/settings.local.json
 _dev/
+train/.venv/
+train/work/
+__pycache__/
