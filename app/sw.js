@@ -1,5 +1,5 @@
 // 앱 화면 파일을 기기에 저장해 두고(오프라인 동작), 백그라운드에서 새 버전을 받아옵니다.
-const CACHE = 'wrongnote-v2';
+const CACHE = 'wrongnote-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -19,6 +19,11 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
+  // AI 손글씨 지우기 (오프라인에서도 동작하도록 함께 저장, 약 15MB)
+  'models/inkseg.onnx',
+  'vendor/ort/ort.wasm.min.js',
+  'vendor/ort/ort-wasm-simd-threaded.mjs',
+  'vendor/ort/ort-wasm-simd-threaded.wasm',
 ];
 
 self.addEventListener('install', (e) => {

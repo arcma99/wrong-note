@@ -1,5 +1,8 @@
 // 필기 지우기 처리 (백그라운드 스레드에서 실행)
 //
+// 기본: AI 모델(models/inkseg.onnx)이 인쇄 글자와 손글씨를 구분해 손글씨만 지웁니다.
+// AI를 쓸 수 없으면 아래 규칙 방식으로 대신합니다.
+//
 // 1) 배경 정리: 종이의 밝기/색을 추정해 나눠서, 그림자와 누런 기를 없애고 종이를 하얗게 만듭니다.
 // 2) 빨간펜: 붉은/분홍 계열의 '가는 선'을 찾아 지웁니다. (넓게 칠해진 인쇄 색은 남김)
 // 3) 연필: 인쇄 글자는 아주 진하고, 연필은 회색으로 연합니다.
@@ -12,19 +15,134 @@ let lum = null;       // 밝기 0~255
 let chroma = null;    // 색의 진하기 0~255
 let penMask = null;   // 빨간펜으로 판단된 픽셀
 let colorPrint = null; // 인쇄된 색(초록 상자, 그림 등)
+let redish = null;    // 붉은 계열 픽셀 (AI가 찾은 손글씨를 연필/빨간펜으로 나눌 때 사용)
+let aiProb = null;    // AI가 본 '손글씨일 확률' 0~255 (원본 크기)
+let aiScale = 1;      // AI를 돌린 축소 비율
+let aiPromise = null;
 
-self.onmessage = (e) => {
+self.onmessage = async (e) => {
   const { type } = e.data;
   if (type === 'init') {
-    const { width, height, buffer } = e.data;
+    const { width, height, buffer, useAI } = e.data;
     init(width, height, new Uint8ClampedArray(buffer));
     const base = renderBase();
     self.postMessage({ type: 'base', buffer: base.buffer }, [base.buffer]);
+    if (useAI) {
+      aiPromise = computeAI()
+        .then(() => true)
+        .catch((err) => { console.warn('AI 실패, 규칙 방식으로 대신합니다', err); return false; });
+      aiPromise.then((ok) => self.postMessage({ type: 'mode', ai: ok }));
+    }
   } else if (type === 'run') {
-    const out = run(e.data.params);
+    if (aiPromise) await aiPromise;
+    const out = aiProb ? runAI(e.data.params) : run(e.data.params);
     self.postMessage({ type: 'result', id: e.data.id, buffer: out.buffer }, [out.buffer]);
   }
 };
+
+// ---------- AI 손글씨 찾기 (기기 안에서 실행, 인터넷 불필요) ----------
+const AI_MAX_SIDE = 1400; // 학습 때와 비슷한 크기로 줄여서 판단
+const TILE = 512, MARGIN = 32; // 메모리를 아끼려고 조각으로 나눠 실행
+let session = null;
+
+async function loadSession() {
+  if (session) return session;
+  importScripts('../vendor/ort/ort.wasm.min.js');
+  /* global ort */
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.wasmPaths = new URL('../vendor/ort/', self.location.href).href;
+  session = await ort.InferenceSession.create(new URL('../models/inkseg.onnx', self.location.href).href,
+    { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+  return session;
+}
+
+async function computeAI() {
+  const sess = await loadSession();
+  const s = Math.min(1, AI_MAX_SIDE / Math.max(W, H));
+  const w2 = Math.max(1, Math.round(W * s)), h2 = Math.max(1, Math.round(H * s));
+  aiScale = s;
+
+  // 1) 줄이기 (칸 평균), 0~1 값
+  const small = new Float32Array(w2 * h2 * 3);
+  const cnt = new Float32Array(w2 * h2);
+  for (let y = 0; y < H; y++) {
+    const sy = Math.min(h2 - 1, (y * s) | 0);
+    for (let x = 0; x < W; x++) {
+      const q = sy * w2 + Math.min(w2 - 1, (x * s) | 0), p = (y * W + x) * 3;
+      small[q * 3] += norm[p]; small[q * 3 + 1] += norm[p + 1]; small[q * 3 + 2] += norm[p + 2];
+      cnt[q]++;
+    }
+  }
+  for (let q = 0; q < w2 * h2; q++) {
+    const k = 1 / (255 * cnt[q]);
+    small[q * 3] *= k; small[q * 3 + 1] *= k; small[q * 3 + 2] *= k;
+  }
+
+  // 2) 조각마다 모델 실행 (가장자리 여유를 두고 가운데만 사용)
+  const prob = new Float32Array(w2 * h2);
+  const core = TILE - 2 * MARGIN;
+  for (let cy = 0; cy < h2; cy += core) {
+    for (let cx = 0; cx < w2; cx += core) {
+      const x0 = Math.max(0, cx - MARGIN), y0 = Math.max(0, cy - MARGIN);
+      const x1 = Math.min(w2, cx + core + MARGIN), y1 = Math.min(h2, cy + core + MARGIN);
+      const tw = x1 - x0, th = y1 - y0;
+      const pw = Math.ceil(tw / 16) * 16, ph = Math.ceil(th / 16) * 16;
+      const input = new Float32Array(3 * pw * ph).fill(1); // 빈 곳은 흰 종이
+      const plane = pw * ph;
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const q = ((y0 + y) * w2 + x0 + x) * 3, o = y * pw + x;
+        input[o] = small[q]; input[plane + o] = small[q + 1]; input[2 * plane + o] = small[q + 2];
+      }
+      const res = await sess.run({ image: new ort.Tensor('float32', input, [1, 3, ph, pw]) });
+      const logits = res.logits.data;
+      const ex = Math.min(w2, cx + core), ey = Math.min(h2, cy + core);
+      for (let y = cy; y < ey; y++) for (let x = cx; x < ex; x++) {
+        prob[y * w2 + x] = 1 / (1 + Math.exp(-logits[(y - y0) * pw + (x - x0)]));
+      }
+    }
+  }
+
+  // 3) 원래 크기로 늘리기 (양선형)
+  aiProb = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(h2 - 1, Math.max(0, (y + 0.5) * s - 0.5));
+    const y0 = fy | 0, y1 = Math.min(h2 - 1, y0 + 1), dy = fy - y0;
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(w2 - 1, Math.max(0, (x + 0.5) * s - 0.5));
+      const x0 = fx | 0, x1 = Math.min(w2 - 1, x0 + 1), dx = fx - x0;
+      const v = (prob[y0 * w2 + x0] * (1 - dx) + prob[y0 * w2 + x1] * dx) * (1 - dy)
+              + (prob[y1 * w2 + x0] * (1 - dx) + prob[y1 * w2 + x1] * dx) * dy;
+      aiProb[y * W + x] = v * 255;
+    }
+  }
+}
+
+// params: { pencil, pen, strength 0~100 }
+function runAI({ pencil, pen, strength }) {
+  const N = W * H;
+  // 강도 50 → 확률 0.5 기준, 강할수록 애매한 것도 지움
+  const th = Math.round((0.75 - strength * 0.005) * 255);
+  let hand = new Uint8Array(N);
+  for (let p = 0; p < N; p++) if (aiProb[p] > th) hand[p] = 1;
+  // 획 가장자리의 옅은 테두리까지
+  hand = dilate(hand, W, H, Math.max(1, Math.round(1 / aiScale)));
+
+  const out = new Uint8ClampedArray(N * 4);
+  for (let p = 0; p < N; p++) {
+    const red = redish[p] === 1;
+    const remove = hand[p] === 1 && (red ? pen : pencil);
+    const o = p * 4;
+    if (remove) {
+      out[o] = out[o + 1] = out[o + 2] = 255;
+    } else {
+      out[o] = levels(norm[p * 3]);
+      out[o + 1] = levels(norm[p * 3 + 1]);
+      out[o + 2] = levels(norm[p * 3 + 2]);
+    }
+    out[o + 3] = 255;
+  }
+  return out;
+}
 
 // ---------- 공통: 이진 마스크 팽창/침식 (정사각형 창, 누적합으로 O(N)) ----------
 function boxPass(src, w, h, r, horizontal, mode) {
@@ -226,6 +344,7 @@ function init(w, h, src) {
   }
   // 빨간펜 가장자리의 옅은 분홍 테두리까지 포함
   penMask = dilate(penMask, w, h, 1);
+  redish = dilate(penCand, w, h, 2);
 }
 
 function levels(v) {

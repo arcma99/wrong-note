@@ -32,14 +32,15 @@ export function createCleaner(src, { onSave, saveLabel = '✓ 저장' }) {
   ctx.drawImage(src, 0, 0);
 
   const scroller = h('div', { class: 'clean-scroller' }, view);
-  const busy = h('div', { class: 'busy' }, h('span', { class: 'spinner' }), '필기 지우는 중…');
+  const busyText = h('span', {}, 'AI가 손글씨 찾는 중…');
+  const busy = h('div', { class: 'busy' }, h('span', { class: 'spinner' }), busyText);
   const stage = h('div', { class: 'stage clean-stage' }, scroller, busy);
 
   // ---------- 자동 지우기 설정 ----------
   const pencilChip = h('button', { class: 'chip on', onclick: () => toggle('pencil', pencilChip) }, '✏️ 연필 지우기');
   const penChip = h('button', { class: 'chip on', onclick: () => toggle('pen', penChip) }, '🖍 빨간펜 지우기');
   const slider = h('input', { type: 'range', min: 0, max: 100, step: 5, value: params.strength, class: 'slider',
-    'aria-label': '연필 지우기 강도' });
+    'aria-label': '지우기 강도' });
   slider.addEventListener('input', () => { params.strength = +slider.value; scheduleRun(); });
   const sliderWrap = h('label', { class: 'slider-wrap' }, h('span', {}, '약하게'), slider, h('span', {}, '강하게'));
 
@@ -212,6 +213,9 @@ export function createCleaner(src, { onSave, saveLabel = '✓ 저장' }) {
       baseCanvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(d.buffer), W, H), 0, 0);
       restorePattern = ctx.createPattern(baseCanvas, 'no-repeat');
       runNow();
+    } else if (d.type === 'mode') {
+      busyText.textContent = '필기 지우는 중…';
+      if (!d.ai) toast('AI를 불러오지 못해 기본 방식으로 지웠어요');
     } else if (d.type === 'result' && d.id === runId) {
       autoData = new ImageData(new Uint8ClampedArray(d.buffer), W, H);
       busy.classList.add('hidden');
@@ -238,7 +242,8 @@ export function createCleaner(src, { onSave, saveLabel = '✓ 저장' }) {
     runId++;
     busy.classList.remove('hidden');
     worker.postMessage({ type: 'run', id: runId,
-      params: { pencil: params.pencil, pen: params.pen, tDark: strengthToDark(params.strength) } });
+      params: { pencil: params.pencil, pen: params.pen, strength: params.strength,
+        tDark: strengthToDark(params.strength) } });
   }
   let runTimer = null;
   function scheduleRun() {
@@ -273,7 +278,7 @@ export function createCleaner(src, { onSave, saveLabel = '✓ 저장' }) {
       layout();
       window.addEventListener('resize', onResize);
       const data = src.getContext('2d').getImageData(0, 0, W, H);
-      worker.postMessage({ type: 'init', width: W, height: H, buffer: data.data.buffer }, [data.data.buffer]);
+      worker.postMessage({ type: 'init', width: W, height: H, buffer: data.data.buffer, useAI: true }, [data.data.buffer]);
     },
     cleanup() {
       window.removeEventListener('resize', onResize);

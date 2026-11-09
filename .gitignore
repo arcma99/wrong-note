@@ -5,3 +5,4 @@ _dev/
 train/.venv/
 train/work/
 __pycache__/
+train/*.onnx
