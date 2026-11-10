@@ -1,5 +1,6 @@
 import { h, toast, debounce, fmtDate, fmtFullDate, nowISO, session } from '../util.js';
 import * as db from '../db.js';
+import { createInkPad } from './inkpad.js';
 import { topbar, SUBJECTS, REASONS, reviewCount, passesFilter, byNewest, subjectKey, subjectFromKey } from '../shared.js';
 
 export async function detailView(pid, qid) {
@@ -111,7 +112,29 @@ export async function detailView(pid, qid) {
   const memo = h('textarea', { class: 'memo', rows: 5,
     placeholder: '왜 틀렸는지, 다음에는 어떻게 풀지 적어보세요',
     value: q.memo,
-    oninput: (e) => { q.memo = e.target.value; saveSoon(); } });
+    oninput: (e) => { q.memo = e.target.value; saveSoon(); drawMemoTabs(); } });
+
+  // ---- 메모: 키보드 / 펜슬 ----
+  const inkPad = createInkPad(q.ink, { onChange: (ink) => { q.ink = ink; saveSoon(); drawMemoTabs(); } });
+  // 손글씨만 있는 문제는 펜슬 칸을 먼저, 그 외에는 이 기기에서 마지막으로 쓴 칸
+  let lastMode = 'text';
+  try { lastMode = localStorage.getItem('wrongnote:memoMode') || 'text'; } catch { /* 무시 */ }
+  let memoMode = q.ink && !q.memo ? 'ink' : q.memo ? 'text' : lastMode;
+  const memoTabs = h('div', { class: 'segmented memo-tabs' });
+  const memoBody = h('div', { class: 'memo-body' });
+  function drawMemoTabs() {
+    const tabs = [['text', '⌨️ 키보드', !!q.memo], ['ink', '✏️ 펜슬', !!q.ink]];
+    memoTabs.replaceChildren(...tabs.map(([k, label, has]) =>
+      h('button', { class: memoMode === k ? 'on' : '', onclick: () => setMemoMode(k) },
+        label, has ? h('i', { class: 'has-dot', 'aria-label': '내용 있음' }) : null)));
+  }
+  function setMemoMode(k) {
+    memoMode = k;
+    try { localStorage.setItem('wrongnote:memoMode', k); } catch { /* 무시 */ }
+    memoBody.replaceChildren(k === 'ink' ? inkPad.el : memo);
+    drawMemoTabs();
+    if (k === 'ink') requestAnimationFrame(() => inkPad.onShow());
+  }
 
   // ---- 복기 체크 ----
   const reviewBox = h('div', { class: 'reviews' });
@@ -152,6 +175,7 @@ export async function detailView(pid, qid) {
   drawSubjects();
   drawReasons();
   drawReviews();
+  setMemoMode(memoMode);
 
   const bar = topbar({ back: listHref(), title: `${fmtFullDate(q.createdAt)} 오답`,
     right: h('button', { class: 'icon-btn', onclick: remove, 'aria-label': '삭제' }, '🗑') });
@@ -169,7 +193,8 @@ export async function detailView(pid, qid) {
         h('section', { class: 'panel' },
           h('h3', {}, '틀린 이유 ', status),
           reasonChips,
-          memo),
+          memoTabs,
+          memoBody),
         h('section', { class: 'panel' },
           h('h3', {}, '과목 · 단원'),
           subjectChips,
@@ -183,6 +208,7 @@ export async function detailView(pid, qid) {
     el,
     cleanup() {
       saveSoon.flush();
+      inkPad.cleanup();
       if (imgUrl) URL.revokeObjectURL(imgUrl);
       if (origUrl) URL.revokeObjectURL(origUrl);
     },

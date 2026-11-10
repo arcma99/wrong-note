@@ -51,7 +51,7 @@ export async function listView(pid, subjectKeyStr) {
         urls.push(u);
         img.src = u;
       });
-      const snippet = q.reasons.length ? q.reasons.join(' · ') : q.memo;
+      const snippet = q.reasons.length ? q.reasons.join(' · ') : q.memo || (q.ink ? '✏️ 손글씨 메모' : '');
       return h('a', { class: 'card' + (isGraduated(q) ? ' graduated' : ''), href: `#/p/${pid}/q/${q.id}` },
         h('div', { class: 'thumb' }, img, isGraduated(q) ? h('span', { class: 'badge-grad' }, '🎓 졸업') : null),
         h('div', { class: 'meta' },

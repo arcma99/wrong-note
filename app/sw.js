@@ -1,5 +1,5 @@
 // 앱 화면 파일을 기기에 저장해 두고(오프라인 동작), 백그라운드에서 새 버전을 받아옵니다.
-const CACHE = 'wrongnote-v5';
+const CACHE = 'wrongnote-v6';
 const ASSETS = [
   './',
   'index.html',
@@ -17,6 +17,7 @@ const ASSETS = [
   'js/views/list.js',
   'js/views/editor.js',
   'js/views/detail.js',
+  'js/views/inkpad.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',

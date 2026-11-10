@@ -313,6 +313,35 @@ h1, h2, h3, p { margin: 0; }
 .input:focus, .memo:focus { border-color: var(--primary); background: #fff; }
 .memo { resize: vertical; min-height: 130px; line-height: 1.6; }
 
+/* 메모: 키보드 / 펜슬 */
+.memo-tabs { margin: 0; }
+.memo-tabs button { position: relative; min-height: 40px; font-size: 15px; }
+.has-dot { position: absolute; top: 7px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+.inkpad { display: flex; flex-direction: column; gap: 8px; }
+.ink-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ink-toolbar .group { display: flex; align-items: center; gap: 4px; padding: 3px; background: #F6EFE9; border-radius: 12px; }
+.ink-color {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--c); border: 3px solid #F6EFE9; box-shadow: 0 0 0 0 transparent;
+}
+.ink-color.on { box-shadow: 0 0 0 2px var(--c); }
+.ink-size { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.ink-size i { display: block; border-radius: 50%; background: var(--ink); }
+.ink-size.on, .ink-tool.on { background: var(--card); box-shadow: var(--shadow); }
+.ink-tool {
+  min-width: 46px; height: 40px; padding: 0 4px; border-radius: 10px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1;
+}
+.ink-tool small { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.small-chip { min-height: 32px; padding: 0 12px; font-size: 13px; }
+.inkpad-paper { border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #FFFEFB; }
+.inkpad-canvas {
+  display: block; width: 100%;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.grow-btn { align-self: center; }
+
 .reviews { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .review {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
