@@ -18,8 +18,15 @@ const routes = [
 
 let current = null;
 let renderToken = 0;
+let updateReady = false;
+
+// 사진 자르기/지우기 화면(/new, /clean)이 아닐 때만 새 버전으로 새로고침
+function reloadIfSafe() {
+  if (updateReady && !/\/(new|clean)$/.test(location.hash)) location.reload();
+}
 
 async function render() {
+  reloadIfSafe();
   const token = ++renderToken;
   if (current?.cleanup) { try { current.cleanup(); } catch (e) { console.error(e); } }
   current = null;
@@ -46,7 +53,19 @@ async function start() {
   window.addEventListener('hashchange', render);
   render();
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW 등록 실패', e));
+    // 새 버전이 설치되면 다음 화면 이동 때 자동으로 새로고침 (사진 편집 중에는 기다림)
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return; // 처음 설치는 새로고침 필요 없음
+      updateReady = true;
+      reloadIfSafe();
+    });
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => {
+        // 앱을 다시 열거나 다시 보게 될 때마다 새 버전 확인
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      })
+      .catch((e) => console.warn('SW 등록 실패', e));
   }
 }
 
