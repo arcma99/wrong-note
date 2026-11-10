@@ -24,9 +24,51 @@ const PEN_KEY = 'wrongnote:penSeen';
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* 무시 */ } };
 
-export function createInkPad(initial, { onChange }) {
+// 획 하나 그리기 (ctx는 이미 가로 1000 기준으로 맞춰져 있어야 함)
+// from: 이 점부터 이어서 그림 (그리는 중 새로 들어온 부분만)
+const widthAt = (s, pr) => s.w * (0.55 + 0.9 * pr);
+export function drawStroke(ctx, s, from = 0) {
+  const p = s.p;
+  ctx.strokeStyle = ctx.fillStyle = s.c;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (p.length === 3) {
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], widthAt(s, p[2]) / 2, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  // 점 사이를 중간점 곡선으로 부드럽게, 압력에 따라 굵기 변화
+  for (let i = Math.max(3, from); i < p.length; i += 3) {
+    const x0 = p[i - 3], y0 = p[i - 2], x1 = p[i], y1 = p[i + 1];
+    const px = i >= 6 ? (p[i - 6] + x0) / 2 : x0, py = i >= 6 ? (p[i - 5] + y0) / 2 : y0;
+    ctx.lineWidth = widthAt(s, (p[i - 1] + p[i + 2]) / 2);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+    if (i + 3 >= p.length) ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+}
+
+// 사진 위에 겹쳐 보여주기용: canvas를 화면 크기(cssW×cssH)에 맞추고 획만 그림
+export function paintInk(canvas, ink, cssW, cssH) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!ink) return;
+  const s = (cssW / L) * dpr;
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  for (const st of ink.strokes) drawStroke(ctx, st);
+}
+
+// opts.bg: 배경 사진(img), opts.fixedH: 높이 고정(사진 비율), 없으면 공책 줄 + 공간 늘리기
+export function createInkPad(initial, { onChange, bg = null, fixedH = null }) {
   const data = {
-    h: Math.min(MAX_H, initial?.h || START_H),
+    h: fixedH || Math.min(MAX_H, initial?.h || START_H),
     strokes: (initial?.strokes || []).map((s) => ({ ...s, p: [...s.p] })),
   };
   const history = [];          // 되돌리기용: 바뀌기 전 strokes 사본
@@ -70,7 +112,7 @@ export function createInkPad(initial, { onChange }) {
       h('div', { class: 'group' }, eraserBtn, undoBtn, clearBtn),
       fingerBtn),
     h('div', { class: 'inkpad-paper' }, canvas),
-    growBtn);
+    fixedH ? null : growBtn);
 
   // ---------- 그리기 ----------
   function resize() {
@@ -89,6 +131,7 @@ export function createInkPad(initial, { onChange }) {
     ctx.fillStyle = '#FFFEFB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    if (bg) { ctx.drawImage(bg, 0, 0, L, data.h); return; }
     ctx.strokeStyle = '#EFE6DD';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
@@ -96,36 +139,9 @@ export function createInkPad(initial, { onChange }) {
     ctx.stroke();
   }
 
-  const widthAt = (s, pr) => s.w * (0.55 + 0.9 * pr);
-
-  // from: 이 점부터 이어서 그림 (그리는 중 새로 들어온 부분만)
-  function drawStroke(s, from = 0) {
-    const p = s.p;
-    ctx.strokeStyle = ctx.fillStyle = s.c;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    if (p.length === 3) {
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], widthAt(s, p[2]) / 2, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    // 점 사이를 중간점 곡선으로 부드럽게, 압력에 따라 굵기 변화
-    for (let i = Math.max(3, from); i < p.length; i += 3) {
-      const x0 = p[i - 3], y0 = p[i - 2], x1 = p[i], y1 = p[i + 1];
-      const px = i >= 6 ? (p[i - 6] + x0) / 2 : x0, py = i >= 6 ? (p[i - 5] + y0) / 2 : y0;
-      ctx.lineWidth = widthAt(s, (p[i - 1] + p[i + 2]) / 2);
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
-      if (i + 3 >= p.length) ctx.lineTo(x1, y1);
-      ctx.stroke();
-    }
-  }
-
   function redraw() {
     paper();
-    for (const s of data.strokes) drawStroke(s);
+    for (const s of data.strokes) drawStroke(ctx, s);
   }
 
   // ---------- 입력 ----------
@@ -164,13 +180,13 @@ export function createInkPad(initial, { onChange }) {
     const stroke = { c: color, w: SIZES[sizeIdx], p: [round1(x), round1(y), round1(pr)] };
     active = { id: e.pointerId, stroke };
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
-    drawStroke(stroke);
+    drawStroke(ctx, stroke);
   });
 
   canvas.addEventListener('pointermove', (e) => {
     if (!active || e.pointerId !== active.id) return;
     if (active.scroll != null) {
-      window.scrollBy(0, active.scroll - e.clientY);
+      (canvas.closest('[data-ink-scroll]') || window).scrollBy(0, active.scroll - e.clientY); // 전체 화면 쓰기에선 그 안에서 움직임
       active.scroll = e.clientY;
       return;
     }
@@ -192,7 +208,7 @@ export function createInkPad(initial, { onChange }) {
     }
     if (s.p.length > from) {
       ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
-      drawStroke(s, from);
+      drawStroke(ctx, s, from);
     }
   }, { passive: false });
 
@@ -246,7 +262,7 @@ export function createInkPad(initial, { onChange }) {
     if (!confirm('손글씨 메모를 모두 지울까요?\n(되돌리기로 다시 살릴 수 있어요)')) return;
     remember();
     data.strokes = [];
-    data.h = START_H;
+    if (!fixedH) data.h = START_H;
     resize();
     changed();
   }

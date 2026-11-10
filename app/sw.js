@@ -1,5 +1,5 @@
 // 앱 화면 파일을 기기에 저장해 두고(오프라인 동작), 백그라운드에서 새 버전을 받아옵니다.
-const CACHE = 'wrongnote-v6';
+const CACHE = 'wrongnote-v7';
 const ASSETS = [
   './',
   'index.html',

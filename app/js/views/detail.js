@@ -1,6 +1,6 @@
 import { h, toast, debounce, fmtDate, fmtFullDate, nowISO, session } from '../util.js';
 import * as db from '../db.js';
-import { createInkPad } from './inkpad.js';
+import { createInkPad, paintInk } from './inkpad.js';
 import { topbar, SUBJECTS, REASONS, reviewCount, passesFilter, byNewest, subjectKey, subjectFromKey } from '../shared.js';
 
 export async function detailView(pid, qid) {
@@ -48,17 +48,69 @@ export async function detailView(pid, qid) {
   const viewer = h('div', { class: 'viewer hidden', onclick: () => viewer.classList.add('hidden') },
     viewerImg,
     h('span', { class: 'viewer-close' }, '닫기 ✕'));
+  // 문제 위에 펜슬로 쓴 것 (사진 위에 겹쳐 보임)
+  const inkLayer = h('canvas', { class: 'ink-overlay hidden' });
+  let showInk = true;
+  function paintOverlay() {
+    const visible = !!q.probInk && showInk && !showOrig;
+    inkLayer.classList.toggle('hidden', !visible);
+    if (visible && mainImg.clientWidth) paintInk(inkLayer, q.probInk, mainImg.clientWidth, mainImg.clientHeight);
+  }
+  mainImg.addEventListener('load', paintOverlay);
+  const imgRO = new ResizeObserver(() => paintOverlay());
+  imgRO.observe(mainImg);
+
   const problemImg = h('button', { class: 'problem-img', onclick: () => viewer.classList.remove('hidden'), 'aria-label': '크게 보기' },
-    imgUrl ? mainImg : h('div', { class: 'empty' }, '이미지가 없어요'));
+    imgUrl ? mainImg : h('div', { class: 'empty' }, '이미지가 없어요'), inkLayer);
   const origToggle = origUrl ? h('button', { class: 'btn small', onclick: () => {
     showOrig = !showOrig;
     mainImg.src = viewerImg.src = showOrig ? origUrl : imgUrl;
     origToggle.textContent = showOrig ? '✨ 정리본 보기' : '👀 내가 푼 원본 보기';
     problemImg.classList.toggle('orig', showOrig);
+    paintOverlay();
   } }, '👀 내가 푼 원본 보기') : null;
+  const inkToggle = h('button', { class: 'btn small', onclick: () => {
+    showInk = !showInk; drawInkActions(); paintOverlay();
+  } });
+  function drawInkActions() {
+    inkToggle.classList.toggle('hidden', !q.probInk);
+    inkToggle.textContent = showInk ? '🙈 필기 숨기기' : '👀 필기 보이기';
+  }
   const imgActions = h('div', { class: 'row img-actions' },
+    imgUrl ? h('button', { class: 'btn small primary', onclick: openAnnotate }, '✏️ 문제에 쓰기') : null,
+    inkToggle,
     origToggle,
-    h('a', { class: 'btn small', href: `#/p/${pid}/q/${qid}/clean` }, '✏️ 다시 다듬기'));
+    h('a', { class: 'btn small', href: `#/p/${pid}/q/${qid}/clean` }, '🪄 다시 다듬기'));
+  drawInkActions();
+
+  // ---- 문제에 쓰기 (전체 화면) ----
+  let closeAnnotate = null;
+  async function openAnnotate() {
+    if (closeAnnotate) return;
+    const bg = new Image();
+    bg.src = imgUrl;
+    try { await bg.decode(); } catch { toast('사진을 불러오지 못했어요'); return; }
+    const fixedH = Math.round((1000 * bg.naturalHeight) / bg.naturalWidth);
+    const pad = createInkPad(q.probInk, { bg, fixedH, onChange: (ink) => { q.probInk = ink; saveSoon(); } });
+    const sheet = h('div', { class: 'annotate' },
+      h('header', { class: 'annotate-bar' },
+        h('h2', {}, '✏️ 문제에 쓰기'),
+        h('button', { class: 'btn primary', onclick: () => closeAnnotate() }, '✓ 완료')),
+      h('div', { class: 'annotate-body', 'data-ink-scroll': '' }, pad.el));
+    closeAnnotate = () => {
+      pad.cleanup();
+      sheet.remove();
+      document.body.classList.remove('no-scroll');
+      closeAnnotate = null;
+      saveSoon.flush();
+      showInk = true;
+      drawInkActions();
+      paintOverlay();
+    };
+    document.body.append(sheet);
+    document.body.classList.add('no-scroll');
+    requestAnimationFrame(() => pad.onShow());
+  }
 
   // ---- 이전 / 다음 문제 ----
   const pager = siblings.length > 1 ? h('div', { class: 'pager' },
@@ -207,8 +259,10 @@ export async function detailView(pid, qid) {
   return {
     el,
     cleanup() {
+      if (closeAnnotate) closeAnnotate();
       saveSoon.flush();
       inkPad.cleanup();
+      imgRO.disconnect();
       if (imgUrl) URL.revokeObjectURL(imgUrl);
       if (origUrl) URL.revokeObjectURL(origUrl);
     },
