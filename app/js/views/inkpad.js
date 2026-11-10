@@ -65,10 +65,15 @@ export function paintInk(canvas, ink, cssW, cssH) {
   for (const st of ink.strokes) drawStroke(ctx, st);
 }
 
-// opts.bg: 배경 사진(img), opts.fixedH: 높이 고정(사진 비율), 없으면 공책 줄 + 공간 늘리기
-export function createInkPad(initial, { onChange, bg = null, fixedH = null }) {
+// opts.bg: 배경 사진(img), opts.bgH: 사진 높이(가로 1000 기준)
+//   사진 모드: 위에는 사진, 그 아래는 풀이용 빈 공간(공책 줄) + 공간 늘리기
+//   메모 모드(bg 없음): 공책 줄만
+export const PHOTO_EXTRA = 420; // 사진 아래 처음 빈 공간
+export function createInkPad(initial, { onChange, bg = null, bgH = 0 }) {
+  const baseH = bg ? bgH + PHOTO_EXTRA : START_H;
+  const maxH = bg ? bgH + MAX_H : MAX_H;
   const data = {
-    h: fixedH || Math.min(MAX_H, initial?.h || START_H),
+    h: Math.min(maxH, Math.max(baseH, initial?.h || 0)),
     strokes: (initial?.strokes || []).map((s) => ({ ...s, p: [...s.p] })),
   };
   const history = [];          // 되돌리기용: 바뀌기 전 strokes 사본
@@ -112,14 +117,16 @@ export function createInkPad(initial, { onChange, bg = null, fixedH = null }) {
       h('div', { class: 'group' }, eraserBtn, undoBtn, clearBtn),
       fingerBtn),
     h('div', { class: 'inkpad-paper' }, canvas),
-    fixedH ? null : growBtn);
+    growBtn);
 
   // ---------- 그리기 ----------
   function resize() {
     const w = canvas.parentElement?.clientWidth || 0;
     if (!w) return;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
     scale = w / L;
+    // iPad Safari는 아주 큰 캔버스를 못 그려서(약 1600만 픽셀) 길어지면 선명도를 조금 낮춤
+    const cssPx = w * data.h * scale;
+    dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(15e6 / cssPx));
     canvas.style.height = `${Math.round(data.h * scale)}px`;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(data.h * scale * dpr);
@@ -131,12 +138,18 @@ export function createInkPad(initial, { onChange, bg = null, fixedH = null }) {
     ctx.fillStyle = '#FFFEFB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
-    if (bg) { ctx.drawImage(bg, 0, 0, L, data.h); return; }
+    const top = bg ? bgH : 0;
+    if (bg) ctx.drawImage(bg, 0, 0, L, bgH);
     ctx.strokeStyle = '#EFE6DD';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    for (let y = LINE_GAP; y < data.h; y += LINE_GAP) { ctx.moveTo(0, y); ctx.lineTo(L, y); }
+    for (let y = top + LINE_GAP; y < data.h; y += LINE_GAP) { ctx.moveTo(0, y); ctx.lineTo(L, y); }
     ctx.stroke();
+    if (bg) { // 사진과 빈 공간 경계
+      ctx.strokeStyle = '#D9CEC5';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, bgH); ctx.lineTo(L, bgH); ctx.stroke();
+    }
   }
 
   function redraw() {
@@ -262,14 +275,14 @@ export function createInkPad(initial, { onChange, bg = null, fixedH = null }) {
     if (!confirm('손글씨 메모를 모두 지울까요?\n(되돌리기로 다시 살릴 수 있어요)')) return;
     remember();
     data.strokes = [];
-    if (!fixedH) data.h = START_H;
+    data.h = baseH;
     resize();
     changed();
   }
 
   function grow() {
-    if (data.h >= MAX_H) { toast('더 늘릴 수 없어요'); return; }
-    data.h = Math.min(MAX_H, data.h + GROW);
+    if (data.h >= maxH) { toast('더 늘릴 수 없어요'); return; }
+    data.h = Math.min(maxH, data.h + GROW);
     resize();
     changed();
   }

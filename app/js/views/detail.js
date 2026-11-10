@@ -50,18 +50,34 @@ export async function detailView(pid, qid) {
     h('span', { class: 'viewer-close' }, '닫기 ✕'));
   // 문제 위에 펜슬로 쓴 것 (사진 위에 겹쳐 보임)
   const inkLayer = h('canvas', { class: 'ink-overlay hidden' });
+  const inkExtra = h('div', { class: 'ink-extra hidden' }); // 사진 아래 여백에 쓴 풀이
   let showInk = true;
   function paintOverlay() {
     const visible = !!q.probInk && showInk && !showOrig;
+    const w = mainImg.clientWidth;
     inkLayer.classList.toggle('hidden', !visible);
-    if (visible && mainImg.clientWidth) paintInk(inkLayer, q.probInk, mainImg.clientWidth, mainImg.clientHeight);
+    // 사진 아래 빈 공간은 실제로 쓴 곳까지만 보여줌
+    let extraPx = 0;
+    if (visible && w && mainImg.naturalWidth) {
+      const imgH = (1000 * mainImg.naturalHeight) / mainImg.naturalWidth;
+      let bottom = 0;
+      for (const s of q.probInk.strokes) for (let i = 1; i < s.p.length; i += 3) if (s.p[i] > bottom) bottom = s.p[i];
+      const extra = bottom > imgH ? Math.min(q.probInk.h, bottom + 40) - imgH : 0;
+      extraPx = Math.round((extra * w) / 1000);
+    }
+    inkExtra.classList.toggle('hidden', extraPx <= 0);
+    if (extraPx > 0) {
+      inkExtra.style.height = `${extraPx}px`;
+      inkExtra.style.backgroundSize = `100% ${(56 * w) / 1000}px`;
+    }
+    if (visible && w) paintInk(inkLayer, q.probInk, w, mainImg.clientHeight + extraPx);
   }
   mainImg.addEventListener('load', paintOverlay);
   const imgRO = new ResizeObserver(() => paintOverlay());
   imgRO.observe(mainImg);
 
   const problemImg = h('button', { class: 'problem-img', onclick: () => viewer.classList.remove('hidden'), 'aria-label': '크게 보기' },
-    imgUrl ? mainImg : h('div', { class: 'empty' }, '이미지가 없어요'), inkLayer);
+    imgUrl ? mainImg : h('div', { class: 'empty' }, '이미지가 없어요'), inkExtra, inkLayer);
   const origToggle = origUrl ? h('button', { class: 'btn small', onclick: () => {
     showOrig = !showOrig;
     mainImg.src = viewerImg.src = showOrig ? origUrl : imgUrl;
@@ -90,8 +106,8 @@ export async function detailView(pid, qid) {
     const bg = new Image();
     bg.src = imgUrl;
     try { await bg.decode(); } catch { toast('사진을 불러오지 못했어요'); return; }
-    const fixedH = Math.round((1000 * bg.naturalHeight) / bg.naturalWidth);
-    const pad = createInkPad(q.probInk, { bg, fixedH, onChange: (ink) => { q.probInk = ink; saveSoon(); } });
+    const bgH = Math.round((1000 * bg.naturalHeight) / bg.naturalWidth);
+    const pad = createInkPad(q.probInk, { bg, bgH, onChange: (ink) => { q.probInk = ink; saveSoon(); } });
     const sheet = h('div', { class: 'annotate' },
       h('header', { class: 'annotate-bar' },
         h('h2', {}, '✏️ 문제에 쓰기'),
@@ -235,23 +251,22 @@ export async function detailView(pid, qid) {
 
   const el = h('div', { class: 'screen detail' },
     bar,
+    // 위에서부터: 복기 체크 → 문제 사진 → (사진 보면서 적도록) 틀린 이유 → 과목·단원
     h('div', { class: 'detail-layout' },
+      h('section', { class: 'panel review-panel' },
+        h('h3', {}, '복기 체크'),
+        reviewBox,
+        grad),
       h('section', { class: 'panel problem-panel' }, pager, problemImg, imgActions),
-      h('div', { class: 'side' },
-        h('section', { class: 'panel' },
-          h('h3', {}, '복기 체크'),
-          reviewBox,
-          grad),
-        h('section', { class: 'panel' },
-          h('h3', {}, '틀린 이유 ', status),
-          reasonChips,
-          memoTabs,
-          memoBody),
-        h('section', { class: 'panel' },
-          h('h3', {}, '과목 · 단원'),
-          subjectChips,
-          unitInput),
-      ),
+      h('section', { class: 'panel' },
+        h('h3', {}, '틀린 이유 ', status),
+        reasonChips,
+        memoTabs,
+        memoBody),
+      h('section', { class: 'panel' },
+        h('h3', {}, '과목 · 단원'),
+        subjectChips,
+        unitInput),
     ),
     viewer,
   );
