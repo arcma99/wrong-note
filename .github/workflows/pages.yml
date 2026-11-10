@@ -1,4 +1,5 @@
-# app 폴더를 GitHub Pages에 올립니다 (master에 올릴 때마다 자동)
+# app 폴더를 GitHub Pages에 올립니다 (app 폴더가 바뀐 채로 master에 올릴 때마다 자동)
+# 주소: https://arcma99.github.io/wrong-note/
 name: Deploy app to GitHub Pages
 
 on:
