@@ -1,6 +1,6 @@
 import { h, toast } from '../util.js';
 import * as db from '../db.js';
-import { topbar, takePendingFile } from '../shared.js';
+import { topbar, takePendingFile, takePendingMeta, subjectKey } from '../shared.js';
 import { fileToCanvas, rotate90, cropCanvas, scaleDown, toBlob } from '../image.js';
 import { createCleaner } from './cleaner.js';
 
@@ -12,13 +12,15 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // 다시 다듬기(qid 있음): 저장된 원본 → ② 필기 지우기 → 덮어쓰기
 export async function editorView(pid, qid) {
   const file = qid ? null : takePendingFile();
+  const meta = qid ? {} : takePendingMeta();
   if (!qid && !file) { location.replace(`#/p/${pid}`); return { el: h('div') }; }
   if (qid) {
     const q = await db.get('problems', qid);
     if (!q || q.profileId !== pid) { location.replace(`#/p/${pid}`); return { el: h('div') }; }
   }
 
-  const backHref = qid ? `#/p/${pid}/q/${qid}` : `#/p/${pid}`;
+  const backHref = qid ? `#/p/${pid}/q/${qid}`
+    : meta.subject ? `#/p/${pid}/s/${subjectKey(meta.subject)}` : `#/p/${pid}`;
   const el = h('div', { class: 'screen editor' });
   let child = null; // 현재 단계의 정리 함수
 
@@ -44,7 +46,7 @@ export async function editorView(pid, qid) {
           location.replace(`#/p/${pid}/q/${qid}`);
         } else {
           const orig = await toBlob(cropped, 0.85);
-          const q = await db.createProblem(pid, full, thumb, orig);
+          const q = await db.createProblem(pid, full, thumb, orig, meta.subject || '');
           location.replace(`#/p/${pid}/q/${q.id}`);
         }
       },

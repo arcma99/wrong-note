@@ -85,11 +85,11 @@ export async function listProblems(profileId) {
 
 const IMAGE_KINDS = ['full', 'thumb', 'orig']; // 정리본, 목록용 작은 그림, 지우기 전 원본
 
-export async function createProblem(profileId, fullBlob, thumbBlob, origBlob) {
+export async function createProblem(profileId, fullBlob, thumbBlob, origBlob, subject = '') {
   const now = nowISO();
   const q = {
     id: uid(), profileId, createdAt: now, updatedAt: now,
-    subject: '', unit: '', reasons: [], memo: '', reviews: [null, null, null],
+    subject, unit: '', reasons: [], memo: '', reviews: [null, null, null],
   };
   await txn(['problems', 'images'], (t) => {
     t.objectStore('problems').put(q);

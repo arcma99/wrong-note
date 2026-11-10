@@ -1,10 +1,23 @@
-import { h, toast, debounce, fmtDate, fmtFullDate, nowISO } from '../util.js';
+import { h, toast, debounce, fmtDate, fmtFullDate, nowISO, session } from '../util.js';
 import * as db from '../db.js';
-import { topbar, SUBJECTS, REASONS, reviewCount } from '../shared.js';
+import { topbar, SUBJECTS, REASONS, reviewCount, passesFilter, byNewest, subjectKey, subjectFromKey } from '../shared.js';
 
 export async function detailView(pid, qid) {
   const q = await db.get('problems', qid);
   if (!q || q.profileId !== pid) { location.replace(`#/p/${pid}`); return { el: h('div') }; }
+
+  // ---- 어느 목록에서 왔는지 (이전/다음, 뒤로 가기 기준) ----
+  let ctx = session.get(`ctx:${pid}`, 'all');
+  if (ctx !== 'all' && subjectFromKey(ctx) !== (q.subject || '')) ctx = subjectKey(q.subject);
+  const filter = session.get(`filter:${pid}`, 'doing');
+  const siblings = (await db.listProblems(pid))
+    .filter((p) => ctx === 'all' || (p.subject || '') === subjectFromKey(ctx))
+    .filter((p) => p.id === qid || passesFilter(p, filter))
+    .sort(byNewest);
+  const idx = siblings.findIndex((p) => p.id === qid);
+  const prevQ = siblings[idx - 1], nextQ = siblings[idx + 1];
+  const go = (p) => { if (p) { saveSoon.flush(); location.replace(`#/p/${pid}/q/${p.id}`); } };
+  const listHref = () => `#/p/${pid}/s/${ctx}`;
 
   const blob = await db.getImage(`${qid}/full`);
   const imgUrl = blob ? URL.createObjectURL(blob) : '';
@@ -29,7 +42,7 @@ export async function detailView(pid, qid) {
 
   // ---- 문제 이미지 ----
   let showOrig = false;
-  const mainImg = h('img', { src: imgUrl, alt: '문제' });
+  const mainImg = h('img', { src: imgUrl, alt: '문제', draggable: 'false' });
   const viewerImg = h('img', { src: imgUrl, alt: '문제 크게 보기' });
   const viewer = h('div', { class: 'viewer hidden', onclick: () => viewer.classList.add('hidden') },
     viewerImg,
@@ -46,12 +59,39 @@ export async function detailView(pid, qid) {
     origToggle,
     h('a', { class: 'btn small', href: `#/p/${pid}/q/${qid}/clean` }, '✏️ 다시 다듬기'));
 
+  // ---- 이전 / 다음 문제 ----
+  const pager = siblings.length > 1 ? h('div', { class: 'pager' },
+    h('button', { class: 'btn', disabled: !prevQ, onclick: () => go(prevQ) }, '‹ 이전'),
+    h('span', { class: 'pos' }, `${idx + 1} / ${siblings.length}`),
+    h('button', { class: 'btn', disabled: !nextQ, onclick: () => go(nextQ) }, '다음 ›')) : null;
+  // 문제 사진을 옆으로 밀어도 넘어가기
+  let swipe = null;
+  problemImg.addEventListener('pointerdown', (e) => { swipe = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+  problemImg.addEventListener('pointerup', (e) => {
+    if (!swipe) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    const quick = Date.now() - swipe.t < 600;
+    swipe = null;
+    if (quick && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      problemImg.dataset.swiped = '1'; // 크게 보기 열리지 않게
+      go(dx < 0 ? nextQ : prevQ);
+    }
+  });
+  problemImg.addEventListener('click', (e) => {
+    if (problemImg.dataset.swiped) { delete problemImg.dataset.swiped; e.stopImmediatePropagation(); }
+  }, true);
+
   // ---- 과목 / 단원 ----
   const subjectChips = h('div', { class: 'chips' });
   function drawSubjects() {
     subjectChips.replaceChildren(...SUBJECTS.map((s) =>
       h('button', { class: 'chip' + (q.subject === s ? ' on' : ''),
-        onclick: () => { q.subject = q.subject === s ? '' : s; drawSubjects(); save(); } }, s)));
+        onclick: () => {
+          q.subject = q.subject === s ? '' : s;
+          // 과목을 바꾸면 '뒤로'는 새 과목 목록으로
+          if (ctx !== 'all') { ctx = subjectKey(q.subject); session.set(`ctx:${pid}`, ctx); backLink.href = listHref(); }
+          drawSubjects(); save();
+        } }, s)));
   }
   const unitInput = h('input', { class: 'input', type: 'text', placeholder: '단원 (예: 비례식의 활용)', value: q.unit,
     oninput: (e) => { q.unit = e.target.value; saveSoon(); } });
@@ -105,18 +145,22 @@ export async function detailView(pid, qid) {
     saveSoon.flush();
     await db.deleteProblem(qid);
     toast('삭제했어요');
-    location.replace(`#/p/${pid}`);
+    const after = nextQ || prevQ;
+    location.replace(after ? `#/p/${pid}/q/${after.id}` : listHref());
   }
 
   drawSubjects();
   drawReasons();
   drawReviews();
 
+  const bar = topbar({ back: listHref(), title: `${fmtFullDate(q.createdAt)} 오답`,
+    right: h('button', { class: 'icon-btn', onclick: remove, 'aria-label': '삭제' }, '🗑') });
+  const backLink = bar.querySelector('a');
+
   const el = h('div', { class: 'screen detail' },
-    topbar({ back: `#/p/${pid}`, title: `${fmtFullDate(q.createdAt)} 오답`,
-      right: h('button', { class: 'icon-btn', onclick: remove, 'aria-label': '삭제' }, '🗑') }),
+    bar,
     h('div', { class: 'detail-layout' },
-      h('section', { class: 'panel problem-panel' }, problemImg, imgActions),
+      h('section', { class: 'panel problem-panel' }, pager, problemImg, imgActions),
       h('div', { class: 'side' },
         h('section', { class: 'panel' },
           h('h3', {}, '복기 체크'),

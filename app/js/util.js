@@ -4,7 +4,12 @@ export function h(tag, props = {}, ...children) {
   for (const [k, v] of Object.entries(props || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') el.className = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [sk, sv] of Object.entries(v)) {
+        if (sk.startsWith('--')) el.style.setProperty(sk, sv); // CSS 변수
+        else el.style[sk] = sv;
+      }
+    }
     else if (k === 'value') el.value = v;
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
     else el.setAttribute(k, v === true ? '' : v);

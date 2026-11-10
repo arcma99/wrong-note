@@ -1,5 +1,6 @@
 import { ensureSeed } from './db.js';
 import { profilesView } from './views/profiles.js';
+import { subjectsView } from './views/subjects.js';
 import { listView } from './views/list.js';
 import { editorView } from './views/editor.js';
 import { detailView } from './views/detail.js';
@@ -8,7 +9,8 @@ const app = document.getElementById('app');
 
 const routes = [
   [/^#?\/?$/, () => profilesView()],
-  [/^#\/p\/([^/]+)$/, (m) => listView(m[1])],
+  [/^#\/p\/([^/]+)$/, (m) => subjectsView(m[1])],
+  [/^#\/p\/([^/]+)\/s\/([^/]+)$/, (m) => listView(m[1], m[2])],
   [/^#\/p\/([^/]+)\/new$/, (m) => editorView(m[1])],
   [/^#\/p\/([^/]+)\/q\/([^/]+)$/, (m) => detailView(m[1], m[2])],
   [/^#\/p\/([^/]+)\/q\/([^/]+)\/clean$/, (m) => editorView(m[1], m[2])],

@@ -121,6 +121,37 @@ h1, h2, h3, p { margin: 0; }
 .chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .chip.reason.on { background: #FFF1D6; border-color: #F5B342; color: #8A5A00; }
 
+/* ---------- 과목 고르기 ---------- */
+.subjects-summary { text-align: center; color: var(--muted); font-size: 16px; margin: 4px 0 18px; }
+.subject-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.subject-card {
+  --accent: var(--primary);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 20px 20px 18px;
+  background: var(--card); border-radius: 22px; box-shadow: var(--shadow);
+  border-top: 6px solid var(--accent);
+  transition: transform .1s;
+}
+.subject-card:active { transform: scale(.97); }
+.subject-card .icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 32px;
+  background: color-mix(in srgb, var(--accent) 14%, white);
+}
+.subject-card .name { font-size: 22px; font-weight: 800; margin-top: 4px; }
+.subject-card .sub { font-size: 15px; color: var(--muted); }
+.subject-card .sub b { color: var(--accent); }
+.subject-card.empty-subject { opacity: .6; box-shadow: none; }
+
+/* 문제 하나씩 보기: 이전 / 다음 */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.pager .btn { min-height: 44px; padding: 0 16px; box-shadow: none; }
+.pager .pos { font-weight: 700; color: var(--muted); font-size: 16px; }
+
 .card-grid {
   display: grid; gap: 14px;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -269,8 +300,8 @@ h1, h2, h3, p { margin: 0; }
 .panel h3 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .save-status { font-size: 13px; font-weight: 600; color: var(--ok); }
 .problem-panel { padding: 10px; }
-.problem-img { display: block; width: 100%; }
-.problem-img img { display: block; width: 100%; height: auto; border-radius: 10px; }
+.problem-img { display: block; width: 100%; touch-action: pan-y; /* 옆으로 밀기는 앱이 처리 */ }
+.problem-img img { display: block; width: 100%; height: auto; border-radius: 10px; -webkit-user-drag: none; user-select: none; }
 .problem-img.orig img { outline: 3px solid #F5B342; }
 .img-actions { justify-content: flex-end; flex-wrap: wrap; padding-top: 8px; }
 
